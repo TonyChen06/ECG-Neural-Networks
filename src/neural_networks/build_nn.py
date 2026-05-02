@@ -4,7 +4,7 @@ import numpy as np
 
 from utils.gpu_setup import is_main
 
-from configs.constants import TRANSFORMER_MODELS, MAE_MODELS, MERL_MODEL, MLAE_MODELS, MTAE_MODELS, ST_MEM_MODELS
+from configs.constants import TRANSFORMER_MODELS, MAE_MODELS, MERL_MODEL, MLAE_MODELS, MTAE_MODELS, ST_MEM_MODELS, XECG_MODELS
 
 
 class BuildNN:
@@ -35,6 +35,9 @@ class BuildNN:
         if self.args.neural_network == "st_mem":
             nn_components = self.prepare_st_mem()
             nn_components["find_unused_parameters"] = ST_MEM_MODELS[self.args.neural_network]["find_unused_parameters"]
+        if self.args.neural_network == "xecg":
+            nn_components = self.prepare_xecg()
+            nn_components["find_unused_parameters"] = XECG_MODELS[self.args.neural_network]["find_unused_parameters"]
         assert nn_components is not None, print("NN Components is None")
         if self.args.nn_ckpt:
             self.load_nn_checkpoint(nn_components, data_representation)
@@ -115,8 +118,23 @@ class BuildNN:
 
     def prepare_st_mem(self):
         from neural_networks.st_mem.st_mem import ST_MEMConfig, ST_MEM
-        cfg = ST_MEMConfig(seq_len=self.args.segment_len, patch_size=self.calculate_patch_size())
+        size_overrides = {
+            "base": {},
+            "large": {"embed_dim": 1024, "depth": 24, "num_heads": 16},
+            "huge": {"embed_dim": 1280, "depth": 32, "num_heads": 16},
+        }[getattr(self.args, "st_mem_size", "base")]
+        cfg = ST_MEMConfig(seq_len=self.args.segment_len, patch_size=self.calculate_patch_size(), **size_overrides)
         model = ST_MEM(cfg)
+        return {"neural_network": model}
+
+    def prepare_xecg(self):
+        from neural_networks.xecg.xecg import xECGConfig, xECG
+        size_overrides = {
+            "base": {},
+            "large": {"embedding_size": 1024, "num_blocks": 24, "num_heads": 8},
+        }[getattr(self.args, "xecg_size", "base")]
+        cfg = xECGConfig(seq_len=self.args.segment_len, patch_size=self.calculate_patch_size(), **size_overrides)
+        model = xECG(cfg)
         return {"neural_network": model}
 
     def load_nn_checkpoint(self, nn_components, data_representation):

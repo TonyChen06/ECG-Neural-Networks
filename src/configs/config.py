@@ -40,7 +40,7 @@ def get_args(mode: Mode) -> argparse.Namespace:
             "--objective",
             type=str,
             default=None,
-            choices=["autoregressive", "mae", "ddpm", "rectified_flow", "merl", "mlae", "mtae", "st_mem",],
+            choices=["autoregressive", "mae", "ddpm", "rectified_flow", "merl", "mlae", "mtae", "st_mem", "xecg"],
             help="Please choose the representation of data you want to input into the neural network.",
         )
         parser.add_argument("--patch_dim", type=int, default=2500, help="Please choose a patch dim that is evenly divisible by signal_len.")
@@ -72,8 +72,13 @@ def get_args(mode: Mode) -> argparse.Namespace:
                 "mlae",
                 "mtae",
                 "st_mem",
+                "xecg",
             ],
         )
+        parser.add_argument("--st_mem_size", type=str, default="base", choices=["base", "large", "huge"],
+                            help="ST-MEM encoder size: base (768/12/12), large (1024/24/16), huge (1280/32/16)")
+        parser.add_argument("--xecg_size", type=str, default="base", choices=["base", "large"],
+                            help="xECG encoder size: base (768/12) or large (1024/24)")
 
         parser.add_argument("--norm_eps", type=float, default=1e-6, help="Please choose the normalization epsilon")
 
@@ -93,8 +98,8 @@ def get_args(mode: Mode) -> argparse.Namespace:
         parser.add_argument("--condition_text_max_len", type=int, default=128, help="Max text length for text conditioning (byte-level)")
         parser.add_argument("--text_feature_extractor", type=str, default=None,
                             help="HuggingFace model name for LLM text encoder")
-        parser.add_argument("--ecg_norm", type = str, default = "instance_minmax", 
-                            choices=["instance_minmax", "instance_zscore", "lead_minmax", "lead_zscore"], help = "choose the normalization method for the ECG")
+        parser.add_argument("--ecg_norm", type = str, default = "instance_minmax",
+                            choices=["instance_minmax", "instance_zscore", "lead_minmax", "lead_zscore", "experiment"], help = "choose the normalization method for the ECG")
         parser.add_argument("--bfloat_16", action = "store_true", default = None)
         parser.add_argument("--signal_head", action="store_true", default=None, help="Attach flow matching signal head to discrete decoder")
         parser.add_argument("--signal_head_layers", type=int, default=4, help="Number of transformer layers in the signal head")

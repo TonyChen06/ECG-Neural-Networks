@@ -14,9 +14,9 @@ class Pretrain:
 
     def signal(self, transformed_data,):
         inputs = np.asarray(transformed_data["transformed_data"])
-        if self.args.neural_network in ("mlae", "mtae", "st_mem"):
+        if self.args.neural_network in ("mlae", "mtae", "st_mem", "xecg"):
             out = {"signal": inputs.astype(np.float32)}
-            if self.args.neural_network in ("mtae", "st_mem") and "padding_mask" in transformed_data:
+            if self.args.neural_network in ("mtae", "st_mem", "xecg") and "padding_mask" in transformed_data:
                 out["padding_mask"] = np.asarray(transformed_data["padding_mask"], dtype=bool)
             return out
         if self.args.objective == "autoregressive":

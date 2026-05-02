@@ -68,6 +68,12 @@ ST_MEM_MODELS = {
     },
 }
 
+XECG_MODELS = {
+    "xecg": {
+        "find_unused_parameters": False,
+    },
+}
+
 # Encoders
 ECG_ENCODERS = {
     "st_mem": {

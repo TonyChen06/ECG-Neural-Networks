@@ -35,7 +35,7 @@ class ST_MEMConfig:
     decoder_num_heads: int = 4
     mlp_ratio: int = 4
     qkv_bias: bool = True
-    norm_pix_loss: bool = False
+    norm_pix_loss: bool = True
     d_model: int = None
 
     def __post_init__(self):

@@ -4,6 +4,10 @@ from transformers import AutoTokenizer
 
 from configs.constants import PTB_INDEPENDENT_IDX
 
+EXPERIMENT_CLIP_MV = 3.0
+EXPERIMENT_MEAN = 0.0
+EXPERIMENT_STD = 0.2306
+
 class Signal:
     def __init__(self, args):
         self.args = args
@@ -60,6 +64,9 @@ class Signal:
             mean = arr.mean(axis = 1, keepdims=True)
             std = arr.std(axis=1, keepdims=True) + self.args.norm_eps
             return (arr - mean) / std
+        elif self.args.ecg_norm == "experiment":
+            clipped = np.clip(arr, -EXPERIMENT_CLIP_MV, EXPERIMENT_CLIP_MV)
+            return (clipped - EXPERIMENT_MEAN) / EXPERIMENT_STD
         else:
             print("Please choose a normalization method")
     

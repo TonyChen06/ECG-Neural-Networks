@@ -15,9 +15,11 @@ dependencies = [
     "pytest>=9.0.2",
     "scikit-learn>=1.8.0",
     "scipy>=1.16.3",
+    "setuptools>=80.9.0",
     "torch>=2.9.1",
     "tqdm>=4.67.1",
     "transformers>=4.57.3",
     "wandb>=0.24.0",
     "wfdb>=4.3.0",
+    "xlstm>=2.0.5",
 ]
