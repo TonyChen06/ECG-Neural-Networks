@@ -133,8 +133,19 @@ class BuildNN:
             "base": {},
             "large": {"embedding_size": 1024, "num_blocks": 24, "num_heads": 8},
         }[getattr(self.args, "xecg_size", "base")]
-        cfg = xECGConfig(seq_len=self.args.segment_len, patch_size=self.calculate_patch_size(), **size_overrides)
+        strategy = getattr(self.args, "xecg_strategy", "mae")
+        cfg = xECGConfig(
+            seq_len=self.args.segment_len,
+            patch_size=self.calculate_patch_size(),
+            pretrain_strategy=strategy,
+            **size_overrides,
+        )
         model = xECG(cfg)
+        if strategy == "sim_dino_v2":
+            # Teacher must exist before training begins; init from the freshly-built
+            # student. This happens before .to(device) and DDP wrapping, so the deepcopy
+            # is cheap (CPU) and DDP only ever sees the student's parameters.
+            model.init_teacher()
         return {"neural_network": model}
 
     def load_nn_checkpoint(self, nn_components, data_representation):

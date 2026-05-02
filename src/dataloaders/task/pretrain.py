@@ -11,6 +11,8 @@ class Pretrain:
             return self.bpe_symbolic(transformed_data,)
         elif self.args.data_representation == "signal":
             return self.signal(transformed_data,)
+        elif self.args.data_representation == "multi_view_signal":
+            return self.multi_view_signal(transformed_data,)
 
     def signal(self, transformed_data,):
         inputs = np.asarray(transformed_data["transformed_data"])
@@ -52,6 +54,16 @@ class Pretrain:
                 "targets": targets.astype(np.float32),
             }
         return out
+
+    def multi_view_signal(self, transformed_data):
+        # Multi-view path for xECG --xecg_strategy sim_dino_v2.
+        # Pass through the (n_views, num_leads, seq_len) global signals and
+        # (n_views, seq_len) bool padding masks as-is. The model consumes
+        # them via forward(global_signals=..., padding_masks=...).
+        return {
+            "global_signals": np.asarray(transformed_data["global_signals"], dtype=np.float32),
+            "padding_masks": np.asarray(transformed_data["padding_masks"], dtype=bool),
+        }
 
     def bpe_symbolic(self, transformed_data):
         inputs = np.asarray(transformed_data["transformed_data"])

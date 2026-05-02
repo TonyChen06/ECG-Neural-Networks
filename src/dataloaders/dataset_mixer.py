@@ -2,6 +2,7 @@ from dataloaders.dataset.base_dataset import BaseDataset
 
 from dataloaders.data_representation.signal import Signal
 from dataloaders.data_representation.bpe_symbolic import BPESymbolic
+from dataloaders.data_representation.multi_view_signal import MultiViewSignal
 from dataloaders.task.forecasting import Forecasting
 from dataloaders.task.pretrain import Pretrain
 from dataloaders.dataset.base_dataset import load_base_dataset
@@ -36,6 +37,8 @@ class DatasetMixer:
             print(f"Using {self.args.data_representation} representation")
         if self.args.data_representation == "signal":
             return Signal(self.args)
+        elif self.args.data_representation == "multi_view_signal":
+            return MultiViewSignal(self.args)
         elif self.args.data_representation == "bpe_symbolic":
             vocab, merges = self.dfm.open_tokenizer(self.args.bpe_tokenizer_path)
             return BPESymbolic(vocab, merges, self.args)

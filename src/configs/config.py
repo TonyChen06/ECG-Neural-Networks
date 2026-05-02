@@ -33,7 +33,7 @@ def get_args(mode: Mode) -> argparse.Namespace:
             "--data_representation",
             type=str,
             default=None,
-            choices=["signal", "bpe_symbolic"],
+            choices=["signal", "bpe_symbolic", "multi_view_signal"],
             help="Please choose the representation of data you want to input into the neural network.",
         )
         parser.add_argument(
@@ -79,6 +79,10 @@ def get_args(mode: Mode) -> argparse.Namespace:
                             help="ST-MEM encoder size: base (768/12/12), large (1024/24/16), huge (1280/32/16)")
         parser.add_argument("--xecg_size", type=str, default="base", choices=["base", "large"],
                             help="xECG encoder size: base (768/12) or large (1024/24)")
+        parser.add_argument("--xecg_strategy", type=str, default="mae", choices=["mae", "sim_dino_v2"],
+                            help="xECG pretraining strategy: mae (masked patch reconstruction; "
+                                 "single-signal data path) or sim_dino_v2 (DINO-v2 self-distillation; "
+                                 "multi-view data path; requires --data_representation multi_view_signal)")
 
         parser.add_argument("--norm_eps", type=float, default=1e-6, help="Please choose the normalization epsilon")
 

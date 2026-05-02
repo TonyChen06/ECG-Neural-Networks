@@ -70,7 +70,10 @@ ST_MEM_MODELS = {
 
 XECG_MODELS = {
     "xecg": {
-        "find_unused_parameters": False,
+        # True because xECG always constructs both reconstruction (used in MAE strategy)
+        # and dino_loss / cls_norm (used in sim_dino_v2 strategy); whichever strategy is
+        # active leaves a couple of parameters with no gradient. Costs a tiny bit in DDP.
+        "find_unused_parameters": True,
     },
 }
 
