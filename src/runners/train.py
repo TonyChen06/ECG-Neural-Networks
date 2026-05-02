@@ -29,6 +29,12 @@ def run_train(
     total_steps_per_epoch = len(dataloader)
     device = next(nn.parameters()).device
 
+    # Unwrap DDP for any model-specific hooks (teacher EMA update, etc.) so that
+    # we don't trigger DDP's autograd graph machinery on a no-grad in-place op.
+    nn_module = nn.module if hasattr(nn, "module") else nn
+    has_teacher_ema = hasattr(nn_module, "update_teacher") and hasattr(nn_module, "ema_beta_at_step")
+    grand_total_steps = total_steps_per_epoch * max(args.epochs, 1)
+
     for step, batch in enumerate(progress):
         batch = {k: batch_to_device(v, device) for k, v in batch.items()}
 
@@ -45,8 +51,18 @@ def run_train(
         optimizer.step_and_update_lr()
         if ema is not None:
             ema.update()
+
+        teacher_beta = None
+        if has_teacher_ema:
+            global_step = epoch * total_steps_per_epoch + step
+            teacher_beta = nn_module.ema_beta_at_step(global_step, grand_total_steps)
+            nn_module.update_teacher(teacher_beta)
+
         if getattr(args, "wandb", False) and is_main():
-            wandb.log({"train/step_loss": loss.item(), "train/lr": optimizer.learning_rate, "epoch": epoch})
+            log = {"train/step_loss": loss.item(), "train/lr": optimizer.learning_rate, "epoch": epoch}
+            if teacher_beta is not None:
+                log["train/teacher_beta"] = teacher_beta
+            wandb.log(log)
         if args.save_step and checkpoint_manager and is_main():
             if checkpoint_manager.save_step(step, total_steps_per_epoch):
                 checkpoint_manager.save_checkpoint(nn, optimizer, epoch, step, prefix="step_", ema=ema)
