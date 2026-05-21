@@ -130,11 +130,31 @@ class BuildNN:
     def prepare_xecg(self):
         from neural_networks.xecg.xecg import xECGConfig, xECG
         size_overrides = {
-            "base": {},
-            "large": {"embedding_size": 1024, "num_blocks": 24, "num_heads": 8},
+            # paper-faithful 57M
+            "base": {"embedding_size": 1024, "num_heads": 4, "num_blocks": 9,
+                     "block_pattern": ["s", "s", "m", "m", "s", "s", "m", "m", "s"]},
+            # ~340M, head_dim=256 (CUDA-friendly)
+            "large": {"embedding_size": 1536, "num_heads": 6, "num_blocks": 24,
+                      "block_pattern": ["s", "s", "m", "m"] * 6},
         }[getattr(self.args, "xecg_size", "base")]
-        cfg = xECGConfig(seq_len=self.args.segment_len, patch_size=self.calculate_patch_size(), **size_overrides)
-        model = xECG(cfg)
+        cfg = xECGConfig(
+            seq_len=self.args.segment_len,
+            patch_size=getattr(self.args, "xecg_patch_size", 50),
+            mask_ratio=getattr(self.args, "mask_ratio", 0.3),
+            masking_type=getattr(self.args, "xecg_masking", "block"),
+            slstm_backend=getattr(self.args, "xecg_slstm_backend", "cuda"),
+            post_encoder_norm=bool(getattr(self.args, "xecg_post_encoder_norm", False)),
+            **size_overrides,
+        )
+        model = xECG(
+            cfg,
+            batch_size_hint=self.args.batch_size,
+            lambda_code_rate=getattr(self.args, "xecg_lambda_cr", 0.1),
+            sim_dino_eps=getattr(self.args, "xecg_sim_dino_eps", 0.05),
+            gather_for_expansion=bool(getattr(self.args, "xecg_gather_cls_for_expansion", True)),
+        )
+        if self.args.task == "pretrain":
+            model.init_teacher()
         return {"neural_network": model}
 
     def load_nn_checkpoint(self, nn_components, data_representation):

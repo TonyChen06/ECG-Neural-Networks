@@ -78,7 +78,36 @@ def get_args(mode: Mode) -> argparse.Namespace:
         parser.add_argument("--st_mem_size", type=str, default="base", choices=["base", "large", "huge"],
                             help="ST-MEM encoder size: base (768/12/12), large (1024/24/16), huge (1280/32/16)")
         parser.add_argument("--xecg_size", type=str, default="base", choices=["base", "large"],
-                            help="xECG encoder size: base (768/12) or large (1024/24)")
+                            help="xECG encoder size: base (1024/9, 57M, paper) or large (1536/24, ~340M)")
+        parser.add_argument("--xecg_patch_size", type=int, default=50,
+                            help="xECG patch size in samples (50 @ 250Hz = 200ms patches; paper uses 25 @ 100Hz)")
+        parser.add_argument("--xecg_n_global", type=int, default=2)
+        parser.add_argument("--xecg_n_local", type=int, default=4)
+        parser.add_argument("--xecg_global_crop", type=float, default=0.8)
+        parser.add_argument("--xecg_local_crop", type=float, default=0.4)
+        parser.add_argument("--xecg_drop_leads_prob", type=float, default=0.2)
+        parser.add_argument("--xecg_jitter_prob", type=float, default=0.1)
+        parser.add_argument("--xecg_amp_scale_prob", type=float, default=0.1)
+        parser.add_argument("--xecg_masking", type=str, default="block", choices=["block", "random"])
+        parser.add_argument("--xecg_lambda_cr", type=float, default=0.1, help="Coding-rate loss weight")
+        parser.add_argument("--xecg_sim_dino_eps", type=float, default=0.05)
+        parser.add_argument("--xecg_ema_start", type=float, default=0.99)
+        parser.add_argument("--xecg_ema_end", type=float, default=1.0)
+        parser.add_argument("--xecg_final_wd", type=float, default=0.4, help="Final weight decay for linear schedule")
+        parser.add_argument("--xecg_slstm_backend", type=str, default="cuda", choices=["cuda", "vanilla"])
+        parser.add_argument("--mask_ratio", type=float, default=0.3)
+        parser.add_argument("--xecg_layerwise_lr_decay", type=float, default=0.9,
+                            help="Per-layer LR decay (1.0 disables; paper uses 0.9)")
+        parser.add_argument("--xecg_shuffle_baseline_wander", action="store_true", default=None,
+                            help="Per-batch FFT lowpass + cross-sample baseline shuffle (paper: on)")
+        parser.add_argument("--xecg_post_encoder_norm", action="store_true", default=None,
+                            help="LayerNorm on encoder output before attn pool. Paper has no norm; default off.")
+        parser.add_argument("--xecg_gather_cls_for_expansion", action="store_true", default=True,
+                            help="All-gather student global CLS across DDP ranks before the log-det. "
+                                 "log_det is non-linear in batch dim, so per-rank averaging doesn't recover "
+                                 "the global covariance rank. No-op single-GPU. Default on.")
+        parser.add_argument("--xecg_no_gather_cls_for_expansion", dest="xecg_gather_cls_for_expansion",
+                            action="store_false", help="Disable the gather (for ablation).")
 
         parser.add_argument("--norm_eps", type=float, default=1e-6, help="Please choose the normalization epsilon")
 
