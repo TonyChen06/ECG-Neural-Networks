@@ -52,6 +52,11 @@ class DBETAConfig:
     mem_decoder_num_heads: int = 6
     norm_pix_loss: bool = True
 
+    # Cross-rank all-gather of ETS text features. Off by default: at batch>=128/GPU
+    # local SigLIP already has paper-equivalent negatives, and the manual collective
+    # deadlocks against DDP's gradient all-reduce on the default process group.
+    ets_gather: bool = False
+
     # --- input geometry (ours: 250 Hz x 10 s = 2500; D-BETA native is 500 Hz x 5000) ---
     input_length: int = 2500
     num_leads: int = 12

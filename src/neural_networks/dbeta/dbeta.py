@@ -114,16 +114,23 @@ def _gather_text(text_feats):
     return torch.cat(gathered, dim=0), dist.get_rank(), world_size
 
 
-def ets_loss(ecg_feats, text_feats, labels, logit_scale=1.0):
-    """SigLIP-style pairwise sigmoid contrastive loss with cross-rank negatives.
+def ets_loss(ecg_feats, text_feats, labels, logit_scale=1.0, gather=False):
+    """SigLIP-style pairwise sigmoid contrastive loss.
 
     The only POSITIVE-eligible pairs are the local (ecg_i, text_i) diagonal, whose
     target is 2*is_aligned_i - 1 (so an N3S-swapped pair is -1). Every other pair
-    -- off-diagonal local AND all cross-rank pairs -- is a negative (-1). This
-    matches open_clip's SigLIP (negative_only across ranks); D-BETA's released
-    port drops that flag and mislabels cross-rank diagonals as positive.
+    -- off-diagonal local AND all cross-rank pairs -- is a negative (-1).
+
+    With `gather=True` the text features are all-gathered across DDP ranks for
+    cross-rank negatives (matches open_clip's negative_only SigLIP). Off by
+    default: a manual collective here deadlocks against DDP's gradient all-reduce
+    on the default process group, and at batch>=128/GPU local negatives already
+    match the paper.
     """
-    all_text, rank, world_size = _gather_text(text_feats)
+    if gather:
+        all_text, rank, world_size = _gather_text(text_feats)
+    else:
+        all_text, rank, world_size = text_feats, 0, 1
     logits = logit_scale * ecg_feats @ all_text.T          # (B, world_size*B)
     b = ecg_feats.size(0)
     gt = -torch.ones((b, all_text.size(0)), device=logits.device, dtype=logits.dtype)
@@ -139,6 +146,7 @@ class DBETA(nn.Module):
         self.mim_prob = cfg.mem_prob
         self.mim_layer = cfg.mem_layer
         self.norm_pix_loss = cfg.norm_pix_loss
+        self.ets_gather = cfg.ets_gather
 
         self.ecg_encoder = ECGEncoder(cfg)
         self.class_embedding = nn.Parameter(torch.FloatTensor(cfg.encoder_embed_dim).uniform_())
@@ -263,7 +271,7 @@ class DBETA(nn.Module):
         # ETM + ETS (labels from N3S: 1 aligned, 0 swapped negative)
         etm_logits = self.etm_head(ret["mm_cls"])
         etm = F.cross_entropy(etm_logits, is_aligned.long())
-        ets = ets_loss(ret["uni_ecg"], ret["uni_text"], is_aligned)
+        ets = ets_loss(ret["uni_ecg"], ret["uni_text"], is_aligned, gather=self.ets_gather)
 
         loss = mlm + mem + etm + ets
         return DBETAOutput(loss=loss, mlm=mlm.detach(), mem=mem.detach(), etm=etm.detach(), ets=ets.detach())

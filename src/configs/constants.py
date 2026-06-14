@@ -70,7 +70,12 @@ ST_MEM_MODELS = {
 
 DBETA_MODELS = {
     "dbeta": {
+        # MEM taps an intermediate cross-layer, and several modules feed multiple
+        # losses -> the gradient-ready order is nondeterministic and DDP's bucket
+        # rebuild desyncs, hanging in backward. static_graph records the graph once
+        # and fixes the reduction order (and subsumes unused-param handling).
         "find_unused_parameters": False,
+        "static_graph": True,
     },
 }
 

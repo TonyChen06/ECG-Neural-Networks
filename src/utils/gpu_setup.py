@@ -70,13 +70,22 @@ class GPUSetup:
         torch.cuda.empty_cache()
         self.args = args
 
-    def setup_gpu(self, model: torch.nn.Module, find_unused_parameters) -> torch.nn.Module:
+    def setup_gpu(self, model: torch.nn.Module, find_unused_parameters, static_graph: bool = False) -> torch.nn.Module:
         device = self.get_device()
         model = model.to(device)
         if getattr(self.args, "distributed", False):
-            model = DDP(model, device_ids=[device.index], output_device=device.index, find_unused_parameters=find_unused_parameters)
+            ddp_kwargs = dict(device_ids=[device.index], output_device=device.index)
+            if static_graph:
+                # Record the autograd graph once and reuse a fixed gradient-reduction
+                # order. Needed for multi-path graphs (e.g. D-BETA's MEM head taps an
+                # intermediate cross-layer) whose bucket rebuild otherwise desyncs and
+                # hangs in backward. static_graph subsumes find_unused handling.
+                ddp_kwargs["static_graph"] = True
+            else:
+                ddp_kwargs["find_unused_parameters"] = find_unused_parameters
+            model = DDP(model, **ddp_kwargs)
         if is_main():
-            print(f"find_unused_parameters: {find_unused_parameters}")
+            print(f"find_unused_parameters: {find_unused_parameters} | static_graph: {static_graph}")
         if getattr(self.args, "torch_compile", False):
             model = torch.compile(model)
         return model

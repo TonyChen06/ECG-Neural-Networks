@@ -1,5 +1,15 @@
 import gc
+import faulthandler
+import os
 import torch
+
+# Debug aid for DDP hangs: set DBETA_HANG_DEBUG=<seconds> to auto-dump every
+# rank's full thread stacks to stderr after that many idle seconds (no sudo /
+# ptrace / signals needed). e.g. DBETA_HANG_DEBUG=20 bash scripts/...
+faulthandler.enable()
+_hang_debug = os.environ.get("DBETA_HANG_DEBUG")
+if _hang_debug:
+    faulthandler.dump_traceback_later(int(_hang_debug), repeat=True)
 
 from optimizers.scheduler import get_optimizer
 from optimizers.ema import EMA
@@ -53,7 +63,8 @@ def main():
         build_nn = BuildNN(args)
         nn_components = build_nn.build_nn(dataloader.dataset.data_representation)
         gpu_setup = GPUSetup(args)
-        nn = gpu_setup.setup_gpu(nn_components["neural_network"], nn_components["find_unused_parameters"])
+        nn = gpu_setup.setup_gpu(nn_components["neural_network"], nn_components["find_unused_parameters"],
+                                 static_graph=nn_components.get("static_graph", False))
         if args.dev:
             gpu_setup.print_model_device(nn, f"{args.neural_network}")
         optimizer = get_optimizer(args, nn)

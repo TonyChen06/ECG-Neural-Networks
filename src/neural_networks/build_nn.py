@@ -38,6 +38,7 @@ class BuildNN:
         if self.args.neural_network == "dbeta":
             nn_components = self.prepare_dbeta()
             nn_components["find_unused_parameters"] = DBETA_MODELS[self.args.neural_network]["find_unused_parameters"]
+            nn_components["static_graph"] = DBETA_MODELS[self.args.neural_network]["static_graph"]
         assert nn_components is not None, print("NN Components is None")
         if self.args.nn_ckpt:
             self.load_nn_checkpoint(nn_components, data_representation)
@@ -51,6 +52,7 @@ class BuildNN:
             text_model=getattr(self.args, "dbeta_text_model", "google/flan-t5-base"),
             max_text_size=getattr(self.args, "dbeta_max_text_len", 256),
             mem_prob=getattr(self.args, "dbeta_mem_prob", 0.75),
+            ets_gather=bool(getattr(self.args, "dbeta_ets_gather", False)),
         )
         model = DBETA(cfg)
         return {"neural_network": model}
