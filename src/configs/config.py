@@ -40,7 +40,7 @@ def get_args(mode: Mode) -> argparse.Namespace:
             "--objective",
             type=str,
             default=None,
-            choices=["autoregressive", "mae", "ddpm", "rectified_flow", "merl", "mlae", "mtae", "st_mem",],
+            choices=["autoregressive", "mae", "ddpm", "rectified_flow", "merl", "mlae", "mtae", "st_mem", "dbeta",],
             help="Please choose the representation of data you want to input into the neural network.",
         )
         parser.add_argument("--patch_dim", type=int, default=2500, help="Please choose a patch dim that is evenly divisible by signal_len.")
@@ -72,8 +72,17 @@ def get_args(mode: Mode) -> argparse.Namespace:
                 "mlae",
                 "mtae",
                 "st_mem",
+                "dbeta",
             ],
         )
+        parser.add_argument("--dbeta_text_model", type=str, default="google/flan-t5-base",
+                            help="HuggingFace T5 encoder for the D-BETA text branch")
+        parser.add_argument("--dbeta_max_text_len", type=int, default=256)
+        parser.add_argument("--dbeta_mlm_prob", type=float, default=0.25)
+        parser.add_argument("--dbeta_mem_prob", type=float, default=0.75, help="ECG token mask ratio for the MAE branch")
+        parser.add_argument("--dbeta_neg_ratio", type=float, default=0.5, help="Fraction of batch corrupted with a non-matching report")
+        parser.add_argument("--dbeta_n3s_index", type=str, default=None,
+                            help="Path prefix to a prebuilt FAISS N3S index (.faiss + .json). If unset, in-batch negatives are used.")
 
         parser.add_argument("--norm_eps", type=float, default=1e-6, help="Please choose the normalization epsilon")
 

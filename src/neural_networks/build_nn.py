@@ -4,7 +4,7 @@ import numpy as np
 
 from utils.gpu_setup import is_main
 
-from configs.constants import TRANSFORMER_MODELS, MAE_MODELS, MERL_MODEL, MLAE_MODELS, MTAE_MODELS, ST_MEM_MODELS
+from configs.constants import TRANSFORMER_MODELS, MAE_MODELS, MERL_MODEL, MLAE_MODELS, MTAE_MODELS, ST_MEM_MODELS, DBETA_MODELS
 
 
 class BuildNN:
@@ -35,10 +35,25 @@ class BuildNN:
         if self.args.neural_network == "st_mem":
             nn_components = self.prepare_st_mem()
             nn_components["find_unused_parameters"] = ST_MEM_MODELS[self.args.neural_network]["find_unused_parameters"]
+        if self.args.neural_network == "dbeta":
+            nn_components = self.prepare_dbeta()
+            nn_components["find_unused_parameters"] = DBETA_MODELS[self.args.neural_network]["find_unused_parameters"]
         assert nn_components is not None, print("NN Components is None")
         if self.args.nn_ckpt:
             self.load_nn_checkpoint(nn_components, data_representation)
         return nn_components
+
+    def prepare_dbeta(self):
+        from neural_networks.dbeta.config import DBETAConfig
+        from neural_networks.dbeta.dbeta import DBETA
+        cfg = DBETAConfig(
+            input_length=self.args.segment_len,
+            text_model=getattr(self.args, "dbeta_text_model", "google/flan-t5-base"),
+            max_text_size=getattr(self.args, "dbeta_max_text_len", 256),
+            mem_prob=getattr(self.args, "dbeta_mem_prob", 0.75),
+        )
+        model = DBETA(cfg)
+        return {"neural_network": model}
 
     def _wrap_with_signal_head(self, decoder):
         from neural_networks.transformer.discrete.signal_head import SignalFlowHeadConfig, SignalFlowHead, DecoderWithSignalHead

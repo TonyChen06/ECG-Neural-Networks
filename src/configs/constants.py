@@ -68,6 +68,12 @@ ST_MEM_MODELS = {
     },
 }
 
+DBETA_MODELS = {
+    "dbeta": {
+        "find_unused_parameters": False,
+    },
+}
+
 # Encoders
 ECG_ENCODERS = {
     "st_mem": {

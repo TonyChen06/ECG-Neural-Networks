@@ -29,6 +29,8 @@ class Signal:
         if self.args.task in ["reconstruction", "generation"]:
             result["report"] = report
             result["12_lead_gt"] = padded_data
+        if self.args.neural_network == "dbeta":
+            result["report"] = report
         return result
 
     def pad(self, signals: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:

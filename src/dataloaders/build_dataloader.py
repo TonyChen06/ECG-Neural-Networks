@@ -16,6 +16,24 @@ class BuildDataLoader:
     ):
         self.args = args
         self.dataset_mixer = DatasetMixer(self.args)
+        self._dbeta_collator = self._maybe_build_dbeta_collator()
+
+    def _maybe_build_dbeta_collator(self):
+        if getattr(self.args, "neural_network", None) != "dbeta":
+            return None
+        from dataloaders.dbeta_collator import DBETACollator
+        retriever = None
+        if getattr(self.args, "dbeta_n3s_index", None):
+            from dataloaders.n3s import N3SRetriever
+            retriever = N3SRetriever(self.args.dbeta_n3s_index)
+        return DBETACollator(
+            tokenizer_name=getattr(self.args, "dbeta_text_model", "google/flan-t5-base"),
+            max_text_size=getattr(self.args, "dbeta_max_text_len", 256),
+            mlm_prob=getattr(self.args, "dbeta_mlm_prob", 0.25),
+            neg_ratio=getattr(self.args, "dbeta_neg_ratio", 0.5),
+            n3s_retriever=retriever,
+            seed=self.args.seed,
+        )
 
     def build_dataloader(
         self,
@@ -63,4 +81,6 @@ class BuildDataLoader:
         batch = [item for item in batch if item is not None]
         if len(batch) == 0:
             return None
+        if self._dbeta_collator is not None:
+            return self._dbeta_collator(batch)
         return torch.utils.data.dataloader.default_collate(batch)

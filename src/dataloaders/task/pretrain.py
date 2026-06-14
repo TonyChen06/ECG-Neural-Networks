@@ -14,6 +14,10 @@ class Pretrain:
 
     def signal(self, transformed_data,):
         inputs = np.asarray(transformed_data["transformed_data"])
+        if self.args.neural_network == "dbeta":
+            # Text tokenization + MLM masking + negative sampling happen in the
+            # DBETACollator at batch level; here we just carry the raw pair.
+            return {"ecg": inputs.astype(np.float32), "report": transformed_data.get("report", "")}
         if self.args.neural_network in ("mlae", "mtae", "st_mem"):
             out = {"signal": inputs.astype(np.float32)}
             if self.args.neural_network in ("mtae", "st_mem") and "padding_mask" in transformed_data:
