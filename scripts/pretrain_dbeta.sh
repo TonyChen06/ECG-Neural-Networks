@@ -16,12 +16,15 @@
 # paper's ~38M sample-view exposure (790k samples), independent of batch size.
 # If a GPU OOMs, drop --batch_size to 32 and --ref_global_bs to 128.
 #
-# LR: the paper's 5e-5 diverged here (loss bottomed ~step 3k then climbed to NaN).
-# The per-loss split showed MLM (the Flan-T5 text branch) was the climber:
-# BERT-style masking is off-distribution for T5, so fine-tuning it destabilizes.
-# Fix: T5 is FROZEN by default now (--dbeta_finetune_text to re-enable). With the
-# text branch stable, lr=2e-5 should hold; freezing also frees ~110M of optimizer
-# state, so --batch_size can likely go back up if you want.
+# LR (the real fix): the divergence was MLM/T5 climbing because we ran the
+# PRETRAINED T5 at the same LR as the random heads. D-BETA inherits M3AE's
+# (zhjohnchan/M3AE) scheme: pretrained unimodal encoders at the base LR, and the
+# prediction heads + cross-modal module at 5x base (--dbeta_lr_multiplier 5).
+# So base lr=1e-5 (T5 + ECG encoder), heads/cross-modal at 5e-5. AdamW, eps 1e-8,
+# warmup 10000 -- all per M3AE's pretraining config. (T5 stays trainable, faithful
+# to the paper; --dbeta_freeze_text is available but not needed.)
+# Note: D-BETA trains in fp32 here -- the framework doesn't autocast it (the
+# --bfloat_16 flag is a no-op for dbeta), which is why batch is 64/GPU.
 
 # NCCL_P2P_DISABLE=1: this box's GPU peer-to-peer (PCIe ACS/IOMMU) deadlocks NCCL
 # collectives -> multi-GPU hangs in the gradient all-reduce. Forcing shared-memory
@@ -46,16 +49,16 @@ src/pretrain_encoder.py \
 --distributed \
 --ref_global_bs 256 \
 --epochs 49 \
---optimizer adam \
---lr 2e-5 \
+--optimizer adamw \
+--lr 1e-5 \
+--dbeta_lr_multiplier 5 \
 --beta1 0.9 \
 --beta2 0.98 \
---eps 1e-6 \
+--eps 1e-8 \
 --weight_decay 0.01 \
 --lr_schedule cosine \
---warmup 5000 \
+--warmup 10000 \
 --grad_clip 1.0 \
---bfloat_16 \
 --patience 999 \
 --patience_delta 0.0 \
 --num_workers 8 \

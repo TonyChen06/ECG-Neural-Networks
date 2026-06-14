@@ -90,8 +90,14 @@ class Optimizer:
         if opt_name == "muon":
             return self._build_muon_optimizer(model)
         cls = OPTIMIZERS.get(opt_name, AdamW)
+        inner = model.module if hasattr(model, "module") else model
+        if hasattr(inner, "get_param_groups"):
+            lr_mult = getattr(self.args, "dbeta_lr_multiplier", 5.0)
+            params = inner.get_param_groups(self.peak_lr, self._weight_decay(), lr_mult)
+        else:
+            params = filter(lambda p: p.requires_grad, model.parameters())
         return cls(
-            filter(lambda p: p.requires_grad, model.parameters()),
+            params,
             lr=self.peak_lr,
             betas=(self.args.beta1, self.args.beta2),
             eps=self.args.eps,
@@ -208,7 +214,7 @@ class Optimizer:
                 g["lr"] = self._adamw_lr * mult
         else:
             for g in self.optimizer.param_groups:
-                g["lr"] = self.peak_lr * mult
+                g["lr"] = self.peak_lr * mult * g.get("lr_scale", 1.0)
         self.optimizer.step()
         self.n_current_steps += 1
 

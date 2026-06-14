@@ -86,9 +86,12 @@ def get_args(mode: Mode) -> argparse.Namespace:
         parser.add_argument("--dbeta_ets_gather", action="store_true", default=None,
                             help="Cross-rank all-gather of ETS text features. Off by default (deadlocks DDP; "
                                  "local negatives already match the paper at batch>=128/GPU).")
-        parser.add_argument("--dbeta_finetune_text", action="store_true", default=None,
-                            help="Fine-tune the T5 text encoder (D-BETA does). Default frozen: BERT-style masking "
-                                 "is off-distribution for T5 and fine-tuning it destabilizes (MLM loss climbs).")
+        parser.add_argument("--dbeta_freeze_text", action="store_true", default=None,
+                            help="Freeze the T5 text encoder. Off by default (D-BETA fine-tunes it; stability "
+                                 "comes from --dbeta_lr_multiplier keeping T5 at the low base LR).")
+        parser.add_argument("--dbeta_lr_multiplier", type=float, default=5.0,
+                            help="M3AE/D-BETA scheme: prediction heads + cross-modal module train at this multiple "
+                                 "of the base LR, while the pretrained unimodal encoders stay at base LR.")
 
         parser.add_argument("--norm_eps", type=float, default=1e-6, help="Please choose the normalization epsilon")
 

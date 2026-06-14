@@ -286,6 +286,39 @@ class DBETA(nn.Module):
         loss = mlm + mem + etm + ets
         return DBETAOutput(loss=loss, mlm=mlm.detach(), mem=mem.detach(), etm=etm.detach(), ets=ets.detach())
 
+    def get_param_groups(self, base_lr, weight_decay, lr_multiplier=5.0):
+        """M3AE's grouping (m3ae_utils.set_schedule): the pretrained unimodal
+        encoders (T5 + the ECG encoder) train at base LR; the prediction heads
+        and the cross-modal module train at lr_multiplier x base. Norms/biases
+        get no weight decay. lr_scale is applied on top of the LR schedule.
+        """
+        no_decay = ("bias", "norm.weight", "norm.bias", "LayerNorm.weight", "LayerNorm.bias",
+                    "layernorm.weight", "layernorm.bias", "layer_norm.weight", "layer_norm.bias")
+        scaled = ("mlm_head", "mem_head", "etm_head", "multi_modal")
+
+        def bucket(scale_key, decay):
+            params = []
+            for n, p in self.named_parameters():
+                if not p.requires_grad:
+                    continue
+                is_scaled = any(s in n for s in scaled)
+                is_no_decay = any(nd in n for nd in no_decay)
+                if is_scaled == scale_key and is_no_decay == (not decay):
+                    params.append(p)
+            return params
+
+        groups = []
+        for scale_key, lr_scale in ((False, 1.0), (True, lr_multiplier)):
+            for decay in (True, False):
+                params = bucket(scale_key, decay)
+                if params:
+                    groups.append({
+                        "params": params,
+                        "lr_scale": lr_scale,
+                        "weight_decay": weight_decay if decay else 0.0,
+                    })
+        return groups
+
     @torch.no_grad()
     def get_features(self, ecg):
         """Downstream (B, 768) ECG vector: CLS -> ecg proj -> unimodal pooler."""
