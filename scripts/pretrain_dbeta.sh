@@ -12,11 +12,14 @@
 # Negatives: in-batch by default. To use the faithful FAISS N3S hard negatives,
 # first build the index (see scripts/build_dbeta_n3s.sh) and pass --dbeta_n3s_index.
 #
-# Per-GPU batch is small because the 321M cross-modal model + T5 is memory-heavy
-# on 48GB A6000s; 4 x 16 = 64 effective. Raise if memory allows (paper used 128).
+# Batch: 128/GPU x 4 = 512 global (4x the paper's 128). LR kept faithful at 5e-5
+# (--ref_global_bs 512 => no auto-scaling). epochs=49 matches the paper's ~38M
+# sample-view exposure (790k samples). NOTE: at fixed 5e-5 with 4x batch this is
+# ~76k optimizer steps vs the paper's 300k -- if the loss is still descending at
+# the end, extend epochs (early stopping is off via --patience 999).
 
-CUDA_HOME=/usr/local/cuda-12.9 PATH=/usr/local/cuda-12.9/bin:$PATH \
-CUDA_VISIBLE_DEVICES=4,5,6,7 \
+TOKENIZERS_PARALLELISM=false \
+CUDA_VISIBLE_DEVICES=0,1,2,3 \
 uv run torchrun --standalone --nproc_per_node=4 --master_port=29405 \
 src/pretrain_encoder.py \
 --data mimic_iv \
@@ -30,10 +33,10 @@ src/pretrain_encoder.py \
 --dbeta_mlm_prob 0.25 \
 --dbeta_mem_prob 0.75 \
 --dbeta_neg_ratio 0.5 \
---batch_size 16 \
+--batch_size 128 \
 --distributed \
---ref_global_bs 64 \
---epochs 20 \
+--ref_global_bs 512 \
+--epochs 49 \
 --optimizer adam \
 --lr 5e-5 \
 --beta1 0.9 \
@@ -42,6 +45,7 @@ src/pretrain_encoder.py \
 --weight_decay 0.01 \
 --lr_schedule cosine \
 --warmup 5000 \
+--grad_clip 1.0 \
 --bfloat_16 \
 --patience 999 \
 --patience_delta 0.0 \

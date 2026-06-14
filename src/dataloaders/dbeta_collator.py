@@ -9,6 +9,12 @@ at batch level, mirroring bench D-BETA's `RawECGTextDataset.collator`:
   4. emit is_aligned labels for the ETM/ETS losses.
 """
 
+import os
+
+# The Rust-backed fast tokenizer deadlocks when a DataLoader forks workers after
+# tokenizer parallelism has been used. Disable it before the tokenizer is built.
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 import numpy as np
 import torch
 from transformers import T5TokenizerFast, DataCollatorForLanguageModeling
