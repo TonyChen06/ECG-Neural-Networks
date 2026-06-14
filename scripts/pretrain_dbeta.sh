@@ -16,10 +16,12 @@
 # paper's ~38M sample-view exposure (790k samples), independent of batch size.
 # If a GPU OOMs, drop --batch_size to 32 and --ref_global_bs to 128.
 #
-# LR: the paper's 5e-5 diverged here (loss bottomed ~step 3k at LR~3e-5 then
-# climbed to NaN as warmup ramped past it) -- our bf16 / 256-batch / 250Hz setup
-# is more LR-sensitive than the paper's fp16 / 128 / 500Hz. Lowered to 2e-5
-# (below the observed ~3e-5 destabilization). If it still diverges, try 1e-5.
+# LR: the paper's 5e-5 diverged here (loss bottomed ~step 3k then climbed to NaN).
+# The per-loss split showed MLM (the Flan-T5 text branch) was the climber:
+# BERT-style masking is off-distribution for T5, so fine-tuning it destabilizes.
+# Fix: T5 is FROZEN by default now (--dbeta_finetune_text to re-enable). With the
+# text branch stable, lr=2e-5 should hold; freezing also frees ~110M of optimizer
+# state, so --batch_size can likely go back up if you want.
 
 # NCCL_P2P_DISABLE=1: this box's GPU peer-to-peer (PCIe ACS/IOMMU) deadlocks NCCL
 # collectives -> multi-GPU hangs in the gradient all-reduce. Forcing shared-memory

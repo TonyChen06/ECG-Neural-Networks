@@ -53,6 +53,7 @@ class BuildNN:
             max_text_size=getattr(self.args, "dbeta_max_text_len", 256),
             mem_prob=getattr(self.args, "dbeta_mem_prob", 0.75),
             ets_gather=bool(getattr(self.args, "dbeta_ets_gather", False)),
+            freeze_text=not bool(getattr(self.args, "dbeta_finetune_text", False)),
         )
         model = DBETA(cfg)
         return {"neural_network": model}

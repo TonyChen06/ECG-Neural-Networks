@@ -153,6 +153,10 @@ class DBETA(nn.Module):
 
         self.language_encoder = T5EncoderModel.from_pretrained(cfg.text_model)
         self.language_encoder.pooler = None
+        self.freeze_text = cfg.freeze_text
+        if cfg.freeze_text:
+            for p in self.language_encoder.parameters():
+                p.requires_grad = False
 
         self.multi_modal_language_proj = nn.Linear(cfg.encoder_embed_dim, cfg.hidden_dim)
         self.multi_modal_ecg_proj = nn.Linear(cfg.encoder_embed_dim, cfg.hidden_dim)
@@ -184,6 +188,12 @@ class DBETA(nn.Module):
         self.etm_head = ETMHead(cfg.hidden_dim * 2)
         for h in (self.mlm_head, self.mem_head, self.etm_head):
             h.apply(_init_weights)
+
+    def train(self, mode=True):
+        super().train(mode)
+        if self.freeze_text:
+            self.language_encoder.eval()  # frozen -> no dropout, deterministic text features
+        return self
 
     def random_masking(self, x, mask_ratio):
         x_ = x[:, :1]

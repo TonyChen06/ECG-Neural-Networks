@@ -57,6 +57,14 @@ class DBETAConfig:
     # deadlocks against DDP's gradient all-reduce on the default process group.
     ets_gather: bool = False
 
+    # Freeze the pretrained T5 text encoder. We feed it BERT-style masked input
+    # (off-distribution for T5's span-corruption pretraining), so fine-tuning it
+    # destabilizes -> MLM loss climbs and the run diverges. Freezing keeps the
+    # text signal stable (MLM head + cross layers + ECG encoder still train) and
+    # frees its optimizer state. D-BETA fine-tunes it; this trades a little
+    # faithfulness for stability (and matches how MERL handles its text encoder).
+    freeze_text: bool = True
+
     # --- input geometry (ours: 250 Hz x 10 s = 2500; D-BETA native is 500 Hz x 5000) ---
     input_length: int = 2500
     num_leads: int = 12
