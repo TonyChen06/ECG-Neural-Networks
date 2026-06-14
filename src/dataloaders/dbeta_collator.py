@@ -25,13 +25,24 @@ MASK_SENTINEL = "<extra_id_0>"  # T5 has no [MASK]; reuse a sentinel as the MLM 
 class DBETACollator:
     def __init__(self, tokenizer_name="google/flan-t5-base", max_text_size=256,
                  mlm_prob=0.25, neg_ratio=0.5, n3s_retriever=None, seed=0):
-        self.tokenizer = T5TokenizerFast.from_pretrained(tokenizer_name)
-        self.tokenizer.mask_token = MASK_SENTINEL
+        self.tokenizer_name = tokenizer_name
+        self.mlm_prob = mlm_prob
         self.max_text_size = max_text_size
-        self.mlm_collator = DataCollatorForLanguageModeling(tokenizer=self.tokenizer, mlm_probability=mlm_prob)
         self.neg_ratio = neg_ratio
         self.n3s = n3s_retriever
         self.rng = np.random.default_rng(seed)
+        # Built lazily on first use so a live Rust tokenizer never crosses the
+        # DataLoader fork (which deadlocks). Each worker builds its own.
+        self._tokenizer = None
+        self._mlm_collator = None
+
+    def _ensure_tokenizer(self):
+        if self._tokenizer is None:
+            self._tokenizer = T5TokenizerFast.from_pretrained(self.tokenizer_name)
+            self._tokenizer.mask_token = MASK_SENTINEL
+            self._mlm_collator = DataCollatorForLanguageModeling(
+                tokenizer=self._tokenizer, mlm_probability=self.mlm_prob
+            )
 
     def _negative_text(self, idx, reports):
         if self.n3s is not None:
@@ -44,6 +55,7 @@ class DBETACollator:
         batch = [b for b in batch if b is not None]
         if not batch:
             return None
+        self._ensure_tokenizer()
         ecgs = torch.stack([torch.as_tensor(b["ecg"], dtype=torch.float32) for b in batch])
         reports = [b["report"] for b in batch]
         n = len(batch)
@@ -59,9 +71,9 @@ class DBETACollator:
         else:
             texts = reports
 
-        enc = self.tokenizer(texts, truncation=True, max_length=self.max_text_size, padding=False)
+        enc = self._tokenizer(texts, truncation=True, max_length=self.max_text_size, padding=False)
         features = [{"input_ids": ids} for ids in enc["input_ids"]]
-        mlm = self.mlm_collator(features)
+        mlm = self._mlm_collator(features)
 
         return {
             "ecg": ecgs,
