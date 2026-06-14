@@ -12,10 +12,14 @@
 # Negatives: in-batch by default. To use the faithful FAISS N3S hard negatives,
 # first build the index (see scripts/build_dbeta_n3s.sh) and pass --dbeta_n3s_index.
 #
-# Batch: 64/GPU x 4 = 256 global (2x the paper's 128). LR kept faithful at 5e-5
-# (--ref_global_bs 256 => no auto-scaling). epochs=49 matches the paper's ~38M
-# sample-view exposure (790k samples), independent of batch size. If a GPU OOMs,
-# drop --batch_size to 32 and --ref_global_bs to 128 (= the paper's exact batch).
+# Batch: 64/GPU x 4 = 256 global (2x the paper's 128). epochs=49 matches the
+# paper's ~38M sample-view exposure (790k samples), independent of batch size.
+# If a GPU OOMs, drop --batch_size to 32 and --ref_global_bs to 128.
+#
+# LR: the paper's 5e-5 diverged here (loss bottomed ~step 3k at LR~3e-5 then
+# climbed to NaN as warmup ramped past it) -- our bf16 / 256-batch / 250Hz setup
+# is more LR-sensitive than the paper's fp16 / 128 / 500Hz. Lowered to 2e-5
+# (below the observed ~3e-5 destabilization). If it still diverges, try 1e-5.
 
 # NCCL_P2P_DISABLE=1: this box's GPU peer-to-peer (PCIe ACS/IOMMU) deadlocks NCCL
 # collectives -> multi-GPU hangs in the gradient all-reduce. Forcing shared-memory
@@ -41,7 +45,7 @@ src/pretrain_encoder.py \
 --ref_global_bs 256 \
 --epochs 49 \
 --optimizer adam \
---lr 5e-5 \
+--lr 2e-5 \
 --beta1 0.9 \
 --beta2 0.98 \
 --eps 1e-6 \
