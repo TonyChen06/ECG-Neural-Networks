@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -94,17 +95,40 @@ class ETMHead(nn.Module):
         return self.fc(x)
 
 
-def ets_loss(ecg_feats, text_feats, labels, logit_scale=1.0):
-    """SigLIP-style pairwise sigmoid contrastive loss (single-process).
+def _gather_text(text_feats):
+    """All-gather text features across DDP ranks for cross-rank SigLIP negatives.
 
-    diagonal target = 2*is_aligned - 1 (so a swapped/negative pair is -1);
-    every off-diagonal pair is a negative (-1).
+    `dist.all_gather` doesn't carry gradients, so we splice our own rank's tensor
+    back in to keep its autograd graph (local-gradient variant: each text vector
+    is updated by its home rank's ECGs; every rank still SEES all texts as
+    negatives). Returns (all_text, rank, world_size).
     """
-    logits = logit_scale * ecg_feats @ text_feats.T
-    n = ecg_feats.size(0)
-    gt = -torch.ones((n, n), device=logits.device, dtype=logits.dtype)
-    diag = torch.arange(n, device=logits.device)
-    gt[diag, diag] = 2.0 * labels.to(logits.dtype) - 1.0
+    if not (dist.is_available() and dist.is_initialized()):
+        return text_feats, 0, 1
+    world_size = dist.get_world_size()
+    if world_size == 1:
+        return text_feats, 0, 1
+    gathered = [torch.zeros_like(text_feats) for _ in range(world_size)]
+    dist.all_gather(gathered, text_feats)
+    gathered[dist.get_rank()] = text_feats
+    return torch.cat(gathered, dim=0), dist.get_rank(), world_size
+
+
+def ets_loss(ecg_feats, text_feats, labels, logit_scale=1.0):
+    """SigLIP-style pairwise sigmoid contrastive loss with cross-rank negatives.
+
+    The only POSITIVE-eligible pairs are the local (ecg_i, text_i) diagonal, whose
+    target is 2*is_aligned_i - 1 (so an N3S-swapped pair is -1). Every other pair
+    -- off-diagonal local AND all cross-rank pairs -- is a negative (-1). This
+    matches open_clip's SigLIP (negative_only across ranks); D-BETA's released
+    port drops that flag and mislabels cross-rank diagonals as positive.
+    """
+    all_text, rank, world_size = _gather_text(text_feats)
+    logits = logit_scale * ecg_feats @ all_text.T          # (B, world_size*B)
+    b = ecg_feats.size(0)
+    gt = -torch.ones((b, all_text.size(0)), device=logits.device, dtype=logits.dtype)
+    rows = torch.arange(b, device=logits.device)
+    gt[rows, rank * b + rows] = 2.0 * labels.to(logits.dtype) - 1.0
     return -F.logsigmoid(gt * logits).mean()
 
 
