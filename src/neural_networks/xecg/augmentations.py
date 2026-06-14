@@ -38,8 +38,10 @@ def jitter(x: np.ndarray, sigma: float = 0.2, amplitude: float = 0.6, prob: floa
 
 
 def random_amplitude_scale(x: np.ndarray, amplitude_range: float = 0.2, prob: float = 0.1, rng: np.random.Generator | None = None) -> np.ndarray:
+    # Matches bench-xecg RandomChangeAmplitude: `prob` is an on/off flag, not a
+    # sampling probability — once enabled it ALWAYS applies a U(1-R/2, 1+R/2) scale.
     g = _rng(rng)
-    if prob <= 0.0 or g.random() > prob:
+    if prob <= 0.0:
         return x
     scale = (g.random() - 0.5) * amplitude_range + 1.0
     return x * scale
@@ -67,13 +69,17 @@ def shuffle_baseline_wander_batched(signals: torch.Tensor, fs: float = 250.0, cu
     """Replace each sample's <cutoff Hz baseline with a random other sample's baseline.
 
     signals: (B, C, T). Returns same shape with baselines cross-sample-shuffled.
-    Leads that are fully zero (e.g. dropped by RandomDropLeads) stay zero so the
-    swap doesn't reintroduce signal into a deliberately-dropped channel.
+    Matches bench-xecg RandomSwitchBaselineWanderBatched: the donor baseline is
+    also time-rolled by a random shift before the swap, and leads that are fully
+    zero (e.g. dropped by RandomDropLeads) stay zero so the swap doesn't
+    reintroduce signal into a deliberately-dropped channel.
     """
     if signals.size(0) <= 1:
         return signals
     baseline = _extract_baseline(signals, fs, cutoff)
+    shift = int(torch.randint(0, signals.size(-1), (1,)).item())
+    donor = torch.roll(baseline, shifts=shift, dims=-1)
     perm = torch.randperm(signals.size(0), device=signals.device)
     zeroed_lead = (signals == 0).all(dim=-1, keepdim=True)
-    out = signals - baseline + baseline[perm]
+    out = signals - baseline + donor[perm]
     return out.masked_fill(zeroed_lead, 0.0)

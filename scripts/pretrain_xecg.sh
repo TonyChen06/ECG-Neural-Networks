@@ -19,7 +19,7 @@ src/pretrain_encoder.py \
 --task "pretrain" \
 --xecg_size base \
 --xecg_patch_size 50 \
---ecg_norm instance_zscore \
+--ecg_norm lead_zscore \
 --batch_size 128 \
 --distributed \
 --ref_global_bs 512 \
@@ -50,7 +50,7 @@ src/pretrain_encoder.py \
 --task "pretrain" \
 --xecg_size large \
 --xecg_patch_size 50 \
---ecg_norm instance_zscore \
+--ecg_norm lead_zscore \
 --batch_size 32 \
 --distributed \
 --ref_global_bs 128 \

@@ -79,7 +79,7 @@ class Pretrain:
     def _augment_view(self, view: np.ndarray) -> np.ndarray:
         view = view.astype(np.float32, copy=False)
         view = random_drop_leads(view, prob=self.args.xecg_drop_leads_prob, keep_lead_idx=1)
-        view = jitter(view, sigma=0.2, amplitude=0.6, prob=self.args.xecg_jitter_prob)
+        view = jitter(view, sigma=0.1, amplitude=0.6, prob=self.args.xecg_jitter_prob)
         view = random_amplitude_scale(view, amplitude_range=0.2, prob=self.args.xecg_amp_scale_prob)
         return view
 

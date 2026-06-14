@@ -24,7 +24,6 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-import math
 import torch
 from torch import nn
 
@@ -57,7 +56,7 @@ class xECGConfig:
     dropout: float = 0.0
     slstm_backend: str = "cuda"
     activation_fn: str = "gelu"
-    pos_embed_max_len: int = 256
+    context_length: int = 8000
     post_encoder_norm: bool = False
 
     def __post_init__(self):
@@ -83,27 +82,30 @@ class xECGPretrainOutput:
     patch: torch.Tensor
 
 
-def _sinusoidal_pos_embed(max_len: int, dim: int) -> torch.Tensor:
-    pe = torch.zeros(max_len, dim)
-    position = torch.arange(0, max_len, dtype=torch.float32).unsqueeze(1)
-    div = torch.exp(torch.arange(0, dim, 2, dtype=torch.float32) * -(math.log(10000.0) / dim))
-    pe[:, 0::2] = torch.sin(position * div)
-    pe[:, 1::2] = torch.cos(position * div)
-    return pe.unsqueeze(0)
-
-
 class AttentionPooling(nn.Module):
-    """Multi-head attention with a single learnable query — pools (B, N, D) → (B, D)."""
+    """Perception-Encoder attention probe (Bolya et al.), as in bench-xecg pooling.py.
 
-    def __init__(self, dim: int, num_heads: int):
+    A single learnable query cross-attends over the patch tokens, followed by a
+    residual MLP block: `x = attn(q, x, x); x = x + mlp(layernorm(x))`. Pools
+    (B, N, D) -> (B, D).
+    """
+
+    def __init__(self, dim: int, num_heads: int, mlp_ratio: int = 4):
         super().__init__()
-        self.query = nn.Parameter(torch.zeros(1, 1, dim))
-        nn.init.trunc_normal_(self.query, std=0.02)
+        self.probe = nn.Parameter(torch.randn(1, 1, dim))
         self.attn = nn.MultiheadAttention(dim, num_heads, batch_first=True)
+        self.layernorm = nn.LayerNorm(dim)
+        mlp_width = int(dim * mlp_ratio)
+        self.mlp = nn.Sequential(
+            nn.Linear(dim, mlp_width),
+            nn.GELU(),
+            nn.Linear(mlp_width, dim),
+        )
 
     def forward(self, x: torch.Tensor, key_padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        q = self.query.expand(x.size(0), -1, -1)
+        q = self.probe.expand(x.size(0), -1, -1).to(x.dtype)
         out, _ = self.attn(q, x, x, key_padding_mask=key_padding_mask, need_weights=False)
+        out = out + self.mlp(self.layernorm(out))
         return out.squeeze(1)
 
 
@@ -129,7 +131,7 @@ def _build_block_stack(cfg: xECGConfig, batch_size_hint: int) -> xLSTMBlockStack
     stack_cfg = xLSTMBlockStackConfig(
         mlstm_block=mlstm_cfg,
         slstm_block=slstm_cfg,
-        context_length=cfg.pos_embed_max_len,
+        context_length=cfg.context_length,
         num_blocks=cfg.num_blocks,
         embedding_dim=cfg.embedding_size,
         slstm_at=cfg.slstm_at,
@@ -172,9 +174,9 @@ class xECG(nn.Module):
         self.lambda_code_rate = lambda_code_rate
 
         self.patch_embed = nn.Conv1d(cfg.num_leads, cfg.embedding_size, kernel_size=cfg.patch_size, stride=cfg.patch_size, bias=False)
-        self.register_buffer("pos_embed", _sinusoidal_pos_embed(cfg.pos_embed_max_len, cfg.embedding_size), persistent=False)
+        # No positional embedding: the xLSTM recurrence is inherently order-aware,
+        # matching the paper and bench-xecg (neither adds positional encodings).
         self.mask_token = nn.Parameter(torch.zeros(cfg.embedding_size))
-        nn.init.trunc_normal_(self.mask_token, std=0.02)
 
         stack = _build_block_stack(cfg, batch_size_hint)
         self.encoder = _AlternatingBidirStack(stack, bidirectional=cfg.bidirectional)
@@ -205,8 +207,6 @@ class xECG(nn.Module):
 
     def encode(self, signal: torch.Tensor, mask: Optional[torch.Tensor] = None, padding_mask: Optional[torch.Tensor] = None) -> xECGOutput:
         x = self.patchify(signal)
-        B, N, _ = x.shape
-        x = x + self.pos_embed[:, :N, :].to(x.dtype)
 
         if mask is not None:
             x = torch.where(mask.unsqueeze(-1), self.mask_token.to(x.dtype).expand_as(x), x)
