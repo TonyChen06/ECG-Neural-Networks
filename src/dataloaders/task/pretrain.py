@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from neural_networks.xecg.augmentations import jitter, random_amplitude_scale, random_crop, random_drop_leads
+from neural_networks.xecg.augmentations import jitter, random_amplitude_scale, random_crop, random_drop_leads, random_resample
 
 
 class Pretrain:
@@ -58,7 +58,17 @@ class Pretrain:
         return out
 
     def _xecg_multiview(self, inputs: np.ndarray) -> dict:
-        # inputs: (C, T) at args.segment_len, already normalized by Signal.
+        # Augmentation-only multi-view: every view is a crop of one recording.
+        return self._xecg_views([inputs])
+
+    def xecg_patient_multiview(self, signals: list) -> dict:
+        # Patient-pair multi-view: `signals` is a list of normalized (C, T) recordings
+        # of the same patient. Following bench-xecg, global view i is drawn from
+        # signals[i % n], and local view i from signals[(i + n_global) % n].
+        return self._xecg_views(signals)
+
+    def _xecg_views(self, source_signals: list) -> dict:
+        # source_signals: list of (C, T) recordings, each already normalized by Signal.
         T = self.args.segment_len
         ps = self.args.xecg_patch_size
         global_len = (int(self.args.xecg_global_crop * T) // ps) * ps
@@ -66,13 +76,15 @@ class Pretrain:
 
         n_global = self.args.xecg_n_global
         n_local = self.args.xecg_n_local
-        globals_ = np.empty((n_global, inputs.shape[0], global_len), dtype=np.float32)
-        locals_ = np.empty((n_local, inputs.shape[0], local_len), dtype=np.float32)
+        ns = len(source_signals)
+        n_leads = source_signals[0].shape[0]
+        globals_ = np.empty((n_global, n_leads, global_len), dtype=np.float32)
+        locals_ = np.empty((n_local, n_leads, local_len), dtype=np.float32)
 
         for i in range(n_global):
-            globals_[i] = self._augment_view(random_crop(inputs, global_len))
+            globals_[i] = self._augment_view(random_crop(source_signals[i % ns], global_len))
         for i in range(n_local):
-            locals_[i] = self._augment_view(random_crop(inputs, local_len))
+            locals_[i] = self._augment_view(random_crop(source_signals[(i + n_global) % ns], local_len))
 
         return {"global_signals": globals_, "local_signals": locals_}
 
@@ -80,6 +92,7 @@ class Pretrain:
         view = view.astype(np.float32, copy=False)
         view = random_drop_leads(view, prob=self.args.xecg_drop_leads_prob, keep_lead_idx=1)
         view = jitter(view, sigma=0.1, amplitude=0.6, prob=self.args.xecg_jitter_prob)
+        view = random_resample(view, max_ratio=getattr(self.args, "xecg_resample_ratio", 0.0))
         view = random_amplitude_scale(view, amplitude_range=0.2, prob=self.args.xecg_amp_scale_prob)
         return view
 

@@ -8,6 +8,7 @@ torch tensor batch and is meant to be called in the train loop.
 
 import numpy as np
 import torch
+from scipy.signal import resample
 
 _default_rng = np.random.default_rng()
 
@@ -45,6 +46,31 @@ def random_amplitude_scale(x: np.ndarray, amplitude_range: float = 0.2, prob: fl
         return x
     scale = (g.random() - 0.5) * amplitude_range + 1.0
     return x * scale
+
+
+def random_resample(x: np.ndarray, max_ratio: float = 0.03, rng: np.random.Generator | None = None) -> np.ndarray:
+    """Time-warp: FFT-resample by a random factor in [1-max_ratio, 1+max_ratio],
+    then fit back to the original length.
+
+    bench-xecg's RandomResample changes the view length and lets the collate pad;
+    our pipeline is fixed-length, so we resample within the window (stretch/squeeze
+    the content) and keep the length. Applied unconditionally when max_ratio > 0,
+    matching their always-on `random_resample` flag.
+    """
+    if max_ratio <= 0.0:
+        return x
+    g = _rng(rng)
+    T = x.shape[-1]
+    factor = 1.0 + (g.random() * 2.0 - 1.0) * max_ratio
+    new_T = max(1, int(round(T * factor)))
+    warped = resample(x, new_T, axis=-1).astype(np.float32)
+    if new_T == T:
+        return warped
+    if new_T > T:
+        return warped[..., :T]
+    out = np.zeros_like(x)
+    out[..., :new_T] = warped
+    return out
 
 
 def random_crop(x: np.ndarray, target_len: int, rng: np.random.Generator | None = None) -> np.ndarray:

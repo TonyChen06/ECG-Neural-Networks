@@ -38,6 +38,41 @@ src/pretrain_encoder.py \
 --num_workers 16 \
 --wandb
 
+# Block 1b: xECG-Base + patient-pair multi-view (paper's cross-recording SSL signal).
+# Views are drawn from different recordings of the SAME patient (MIMIC-IV: ~64% of
+# patients have 2+ recordings). The epoch is keyed per-patient (~161k items) vs
+# per-recording (~789k), so each epoch is ~5x smaller; epochs raised 50->250 to keep
+# the same total step/compute budget as Block 1. Use as the A/B partner of Block 1.
+CUDA_VISIBLE_DEVICES=4,5,6,7 \
+uv run torchrun --standalone --nproc_per_node=4 --master_port=29413 \
+src/pretrain_encoder.py \
+--data mimic_iv \
+--data_representation "signal" \
+--objective "xecg" \
+--neural_network "xecg" \
+--task "pretrain" \
+--xecg_size base \
+--xecg_patch_size 50 \
+--xecg_patient_pair \
+--ecg_norm lead_zscore \
+--batch_size 128 \
+--distributed \
+--ref_global_bs 512 \
+--epochs 250 \
+--lr 1e-4 \
+--lr_schedule cosine \
+--optimizer adamw \
+--weight_decay 0.04 \
+--xecg_final_wd 0.4 \
+--xecg_layerwise_lr_decay 0.9 \
+--xecg_shuffle_baseline_wander \
+--warmup 2500 \
+--grad_clip 3.0 \
+--patience 999 \
+--patience_delta 0.0 \
+--num_workers 16 \
+--wandb
+
 # Block 2: xECG-Large (~340M params, embed=1536, 24 blocks, head_dim=256 CUDA-friendly).
 # Lower per-GPU batch since the bidirectional alternating-flip + 6 student forwards is heavy.
 CUDA_VISIBLE_DEVICES=4,5,6,7 \

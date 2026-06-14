@@ -88,6 +88,11 @@ def get_args(mode: Mode) -> argparse.Namespace:
         parser.add_argument("--xecg_drop_leads_prob", type=float, default=0.2)
         parser.add_argument("--xecg_jitter_prob", type=float, default=0.1)
         parser.add_argument("--xecg_amp_scale_prob", type=float, default=0.1)
+        parser.add_argument("--xecg_resample_ratio", type=float, default=0.03,
+                            help="Random time-warp resample range (+/- ratio). 0 disables. Paper uses ~0.03.")
+        parser.add_argument("--xecg_patient_pair", action="store_true", default=None,
+                            help="Patient-pair multi-view: draw views from different recordings of the same "
+                                 "patient (requires patient id in filename). Epoch is keyed per-patient.")
         parser.add_argument("--xecg_masking", type=str, default="block", choices=["block", "random"])
         parser.add_argument("--xecg_lambda_cr", type=float, default=0.1, help="Coding-rate loss weight")
         parser.add_argument("--xecg_sim_dino_eps", type=float, default=0.05)
