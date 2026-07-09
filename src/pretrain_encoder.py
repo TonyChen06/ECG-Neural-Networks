@@ -1,4 +1,5 @@
 import gc
+import math
 import torch
 
 from optimizers.scheduler import get_optimizer
@@ -52,7 +53,9 @@ def main():
         set_seed(args.seed)
         build_dataloader = BuildDataLoader(args)
         dataloader = build_dataloader.build_dataloader()
-        args.max_steps = len(dataloader) * args.epochs
+        if args.grad_accum_steps < 1:
+            raise ValueError("grad_accum_steps must be at least 1")
+        args.max_steps = math.ceil(len(dataloader) / args.grad_accum_steps) * args.epochs
         build_nn = BuildNN(args)
         nn_components = build_nn.build_nn(dataloader.dataset.data_representation)
         gpu_setup = GPUSetup(args)

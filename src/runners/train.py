@@ -28,29 +28,37 @@ def run_train(
     )
     total_steps_per_epoch = len(dataloader)
     device = next(nn.parameters()).device
+    accum_steps = args.grad_accum_steps
 
+    optimizer.zero_grad()
     for step, batch in enumerate(progress):
         batch = {k: batch_to_device(v, device) for k, v in batch.items()}
 
-        optimizer.zero_grad()
         out = nn(**batch)
-        loss = out.loss
-        total_loss += loss.item()
+        raw_loss = out.loss
+        window_start = step - step % accum_steps
+        window_size = min(accum_steps, total_steps_per_epoch - window_start)
+        loss = raw_loss / window_size
+        total_loss += raw_loss.item()
         total_steps += 1
         loss.backward()
-        grad_clip = getattr(args, "grad_clip", 0.0)
-        if grad_clip > 0:
-            params = (p for p in nn.parameters() if p.grad is not None)
-            torch.nn.utils.clip_grad_norm_(params, grad_clip)
-        optimizer.step_and_update_lr()
-        if ema is not None:
-            ema.update()
-        if getattr(args, "wandb", False) and is_main():
-            wandb.log({"train/step_loss": loss.item(), "train/lr": optimizer.learning_rate, "epoch": epoch})
-        if args.save_step and checkpoint_manager and is_main():
-            if checkpoint_manager.save_step(step, total_steps_per_epoch):
-                checkpoint_manager.save_checkpoint(nn, optimizer, epoch, step, prefix="step_", ema=ema)
-        if train_dev_break(getattr(args, "dev", False), batch, loss.item()):
+
+        if (step + 1) % accum_steps == 0 or (step + 1) == total_steps_per_epoch:
+            grad_clip = getattr(args, "grad_clip", 0.0)
+            if grad_clip > 0:
+                params = (p for p in nn.parameters() if p.grad is not None)
+                torch.nn.utils.clip_grad_norm_(params, grad_clip)
+            optimizer.step_and_update_lr()
+            optimizer.zero_grad()
+            if ema is not None:
+                ema.update()
+            if getattr(args, "wandb", False) and is_main():
+                wandb.log({"train/step_loss": raw_loss.item(), "train/lr": optimizer.learning_rate, "epoch": epoch})
+            if args.save_step and checkpoint_manager and is_main():
+                if checkpoint_manager.save_step(step, total_steps_per_epoch):
+                    checkpoint_manager.save_checkpoint(nn, optimizer, epoch, step, prefix="step_", ema=ema)
+
+        if train_dev_break(getattr(args, "dev", False), batch, raw_loss.item()):
             break
         # if step > 4000:
         #     break
